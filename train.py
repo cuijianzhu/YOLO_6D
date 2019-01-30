@@ -46,8 +46,7 @@ class Solver(object):
         self.saveconfig = False
         self.net = net
         self.data = data
-        self.reader = tf.TFRecordReader()
-        self.tfrecords = 'data/train.tfrecord'
+
         self.batch_size = cfg.BATCH_SIZE
         self.epoch = cfg.EPOCH
         self.weight_file = cfg.WEIGHTS_FILE  # data/weights/
@@ -62,10 +61,18 @@ class Solver(object):
         if self.saveconfig:
             self.save_config()
 
+        self.tfrecords = 'data/train.tfrecord'
+        self.queue = tf.train.string_input_producer([self.tfrecords], num_epochs=self.epoch)
+        self.reader = tf.TFRecordReader()
+        self.images, self.labels = self.read_and_decode()
+        self.coord = None
+        self.threads = None
+
         self.variable_to_restore = tf.global_variables()[:-2]
         self.variable_to_save = tf.global_variables()
         self.restorer = tf.train.Saver(self.variable_to_restore, max_to_keep=3)
         self.saver = tf.train.Saver(self.variable_to_save, max_to_keep=3)
+        self.features = None
 
         self.ckpt_file = os.path.join(self.weight_file, 'yolo_6d.ckpt')
         self.summary_op = tf.summary.merge_all()
@@ -96,6 +103,7 @@ class Solver(object):
 
         self.sess = tf.Session(config=config)
         self.sess.run(tf.global_variables_initializer())
+        self.sess.run(tf.local_variables_initializer())
 
         if self.weight_file is not None:
             print('\n----------Restoring weights from: {}------------'.format(self.weight_file))
@@ -103,39 +111,49 @@ class Solver(object):
 
         self.writer.add_graph(self.sess.graph)
 
+    def read_and_decode(self):
+        __, serialized_example = self.reader.read(self.queue)
+        self.features = tf.parse_single_example(serialized_example,
+                                                features={'labels':tf.FixedLenFeature([], tf.string), 
+                                                          'images':tf.FixedLenFeature([], tf.string)})
+        image = tf.decode_raw(self.features['images'], tf.float32)
+        image.set_shape([416 * 416 * 3])
+        image = tf.reshape(image, [416, 416, 3])
+        image = tf.cast(image, tf.float32) / 255 * 2.0 - 1.0
+
+        label = tf.decode_raw(self.features['labels'], tf.float32)
+        label.set_shape([13 * 13 * 32])
+        label = tf.reshape(label, [13, 13, 32])
+        label = tf.cast(label, tf.float32)
+        if True:
+            batch = self.batch_size
+            # min_after_dequeue = 10
+            # capacity = min_after_dequeue + 3 * batch
+            images, labels = tf.train.batch([image, label],
+                                                    batch_size=batch,
+                                                    num_threads=2,
+                                                    capacity=2000)
+
+        return images, labels
 
     def train(self):
         self.net.evaluation_off()
         train_timer = Timer()
         load_timer = Timer()
-        file_name_queue = tf.train.string_input_producer([self.tfrecords], num_epochs=None)
-        __, serialized_example = self.reader.read(file_name_queue)
-        features = tf.parse_single_example(serialized_example,
-                                           features={
-                                               'labels':tf.FixedLenFeature([], tf.string),
-                                               'images':tf.FixedLenFeature([], tf.string),
-                                           })
+        
+        self.coord = tf.train.Coordinator()
+        self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
 
         epoch = 0
         while epoch <= self.epoch:
             for step in range(0, self.max_iter-1):
                 load_timer.tic()
                 # images, labels = self.data.next_batches()
-
-                images = tf.decode_raw(features['images'], tf.float32)
-                labels = tf.decode_raw(features['labels'], tf.float32)
-                if True:
-                    batch = self.batch_size
-                    min_after_dequeue = 10
-                    capacity = min_after_dequeue + 3 * batch
-                    images, labels = tf.train.shuffle_batch([images, labels],
-                                                            batch_size=batch,
-                                                            num_threads=3,
-                                                            capacity=capacity,
-                                                            min_after_dequeue=min_after_dequeue)
+                images, labels = self.sess.run([self.images, self.labels])
                 load_timer.toc()
-
                 feed_dict = {self.net.input_images: images, self.net.labels: labels}
+                self.coord.request_stop()
+                self.coord.join(self.threads)
 
                 if step % self.summary_iter == 0:
                     if step % (self.summary_iter * 4) == 0:
@@ -209,15 +227,15 @@ class Solver(object):
         load_timer.tic()
         # images, labels = self.data.next_batches_test()
 
-        file_name_queue = tf.train.string_input_producer([self.tfrecords], num_epochs=None)
-        __, serialized_example = self.reader.read(file_name_queue)
-        features = tf.parse_single_example(serialized_example,
-                                           features={
-                                               'labels':tf.FixedLenFeature([], tf.string),
-                                               'images':tf.FixedLenFeature([], tf.string),
-                                           })
-        images = tf.decode_raw(features['images'], tf.float32)
-        labels = tf.decode_raw(features['labels'], tf.float32)
+        # file_name_queue = tf.train.string_input_producer([self.tfrecords], num_epochs=None)
+        # __, serialized_example = self.reader.read(file_name_queue)
+        # features = tf.parse_single_example(serialized_example,
+                                           # features={
+                                               # 'labels':tf.FixedLenFeature([], tf.string),
+                                               # 'images':tf.FixedLenFeature([], tf.string),
+                                           # })
+        images = tf.decode_raw(self.features['images'], tf.float32)
+        labels = tf.decode_raw(self.features['labels'], tf.float32)
         if True:
             batch = self.batch_size
             min_after_dequeue = 10
