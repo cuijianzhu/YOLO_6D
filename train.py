@@ -141,14 +141,14 @@ class Solver(object):
         train_timer = Timer()
         load_timer = Timer()
         
-        self.coord = tf.train.Coordinator()
-        self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
-
         epoch = 0
         while epoch <= self.epoch:
             for step in range(0, self.max_iter-1):
                 load_timer.tic()
                 # images, labels = self.data.next_batches()
+                self.coord = tf.train.Coordinator()
+                self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
+
                 images, labels = self.sess.run([self.images, self.labels])
                 load_timer.toc()
                 feed_dict = {self.net.input_images: images, self.net.labels: labels}
