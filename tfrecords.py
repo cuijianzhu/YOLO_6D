@@ -35,7 +35,8 @@ def encode_to_tfrecords(tfrecords_filename, name):
     with open(bg_txt, 'r') as f:
         bg_files = [x.split()[0] for x in f.readlines()]
 
-    for i in range(len(imgname)):
+    # for i in range(len(imgname)):
+    for i in range(20):
         img = imgname[i]
         # mask images
         mask_list = 'LINEMOD/' + name + '/mask/'
@@ -71,8 +72,8 @@ def encode_to_tfrecords(tfrecords_filename, name):
 
         example = tf.train.Example(features=tf.train.Features(
             feature={
-                'labels': tf.train.Feature(bytes_list = tf.train.BytesList(value=[label])),
-                'images': tf.train.Feature(bytes_list = tf.train.BytesList(value=[image_raw]))
+                'images': tf.train.Feature(bytes_list = tf.train.BytesList(value=[image_raw])),
+                'labels': tf.train.Feature(bytes_list = tf.train.BytesList(value=[label]))
             }))
         writer.write(example.SerializeToString())
 
@@ -154,7 +155,7 @@ def label_read(gt_labels, flipped):
 
 
 if __name__ == "__main__":
-    train_filename = 'data/train.tfrecord'
+    train_filename = 'data/test.tfrecord'
     name = 'ape'
     encode_to_tfrecords(train_filename, name)
 
