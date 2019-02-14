@@ -16,6 +16,7 @@ import tensorflow as tf
 import numpy as np
 import cv2
 import random
+import argparse
 
 def encode_to_tfrecords(tfrecords_filename, name):
     if os.path.exists(tfrecords_filename):
@@ -35,8 +36,7 @@ def encode_to_tfrecords(tfrecords_filename, name):
     with open(bg_txt, 'r') as f:
         bg_files = [x.split()[0] for x in f.readlines()]
 
-    # for i in range(len(imgname)):
-    for i in range(20):
+    for i in range(len(imgname)):
         img = imgname[i]
         # mask images
         mask_list = 'LINEMOD/' + name + '/mask/'
@@ -63,7 +63,6 @@ def encode_to_tfrecords(tfrecords_filename, name):
         bg[mask == 255] = 0
 
         image_raw = obj + bg
-        print("image size: {}".format(image_raw.shape))
         image_raw = image_raw.tostring()
 
         label = gt_labels[i]
@@ -156,7 +155,12 @@ def label_read(gt_labels, flipped):
 
 
 if __name__ == "__main__":
-    train_filename = 'data/test.tfrecord'
-    name = 'ape'
-    encode_to_tfrecords(train_filename, name)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--filepath', default='data', type=str)
+    parser.add_argument('--name', default='ape', type=str)
+    args = parser.parse_args()
+
+    suffix = args.name + '.tfrecords'
+    filename = os.path.join(args.filepath, suffix)
+    encode_to_tfrecords(filename, args.name)
 
