@@ -63,6 +63,7 @@ def encode_to_tfrecords(tfrecords_filename, name):
         bg[mask == 255] = 0
 
         image_raw = obj + bg
+        print("image size: {}".format(image_raw.shape))
         image_raw = image_raw.tostring()
 
         label = gt_labels[i]
